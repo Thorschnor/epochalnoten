@@ -1,3 +1,16 @@
+// Your web app's Firebase configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyDv_8cNiHAl0zSeOczpxq-VD1Vowg6s14M",
+    authDomain: "epochalnoten.firebaseapp.com",
+    projectId: "epochalnoten",
+    storageBucket: "epochalnoten.appspot.com",
+    messagingSenderId: "421344752747",
+    appId: "1:421344752747:web:bad72dfa5de5a0069a2d2e"
+};        
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
 document.getElementById('login-button').addEventListener('click', login);
 document.getElementById('logout-button').addEventListener('click', logout);
 
@@ -103,41 +116,83 @@ function editClass(name) {
     const newClassDescription = prompt('Neue Beschreibung:');
 
     if (newClassName && newClassDescription) {
-        let classes = JSON.parse(localStorage.getItem('classes')) || [];
-        classes = classes.map(c => c.name === name ? { name: newClassName, description: newClassDescription, students: c.students } : c);
-        localStorage.setItem('classes', JSON.stringify(classes));
-        updateClassesUI();
-    }
-}
-
-function deleteClass(name) {
-    let classes = JSON.parse(localStorage.getItem('classes')) || [];
-    classes = classes.filter(c => c.name !== name);
-    localStorage.setItem('classes', JSON.stringify(classes));
-}
-
-function saveClass(name, description) {
-    let classes = JSON.parse(localStorage.getItem('classes')) || [];
-    classes.push({ name, description, students: [] });
-    localStorage.setItem('classes', JSON.stringify(classes));
-}
-
-function loadClasses() {
-    let classes = JSON.parse(localStorage.getItem('classes')) || [];
-    classes.forEach(c => {
-        const classCard = createClassCard(c.name, c.description);
-        if (c.students) {
-            loadStudents(classCard, c.students);
-        }
-        document.getElementById('classes-container').appendChild(classCard);
-    });
-    if (isAdmin) {
-        Sortable.create(document.getElementById('classes-container'), {
-            animation: 150,
-            onEnd: saveNewOrder
+        db.collection('classes').where('name', '==', name).get().then((querySnapshot) => {
+            querySnapshot.forEach((doc) => {
+                let classData = doc.data();
+                classData.name = newClassName;
+                classData.description = newClassDescription;
+                db.collection('classes').doc(doc.id).update(classData).then(() => {
+                    console.log('Class updated successfully');
+                    updateClassesUI();
+                }).catch((error) => {
+                    console.error('Error updating class: ', error);
+                });
+            });
+        }).catch((error) => {
+            console.error('Error finding class: ', error);
         });
     }
 }
+
+
+function deleteClass(name) {
+    db.collection('classes').where('name', '==', name).get().then((querySnapshot) => {
+        querySnapshot.forEach((doc) => {
+            db.collection('classes').doc(doc.id).delete().then(() => {
+                console.log('Class deleted successfully');
+                updateClassesUI();
+            }).catch((error) => {
+                console.error('Error deleting class: ', error);
+            });
+        });
+    });
+}
+
+function saveClass(name, description) {
+    db.collection('classes').get().then((querySnapshot) => {
+        const order = querySnapshot.size; // Anzahl der vorhandenen Klassen als Position für die neue Klasse
+
+        db.collection('classes').doc(name).set({
+            name: name,
+            description: description,
+            students: [],
+            position: order
+        })
+        .then(() => {
+            console.log("Class successfully written!");
+            updateClassesUI();
+        })
+        .catch((error) => {
+            console.error("Error writing class: ", error);
+        });
+    });
+}
+
+
+function loadClasses() {
+    db.collection('classes').orderBy('position').get()
+    .then((querySnapshot) => {
+        document.getElementById('classes-container').innerHTML = ''; // Clear the container before loading
+        querySnapshot.forEach((doc) => {
+            const classData = doc.data();
+            const classCard = createClassCard(classData.name, classData.description);
+            if (classData.students) {
+                loadStudents(classCard, classData.students);
+            }
+            document.getElementById('classes-container').appendChild(classCard);
+        });
+        if (isAdmin) {
+            Sortable.create(document.getElementById('classes-container'), {
+                animation: 150,
+                onEnd: saveNewOrder
+            });
+        }
+    })
+    .catch((error) => {
+        console.error('Error loading classes: ', error);
+    });
+}
+
 
 function updateClassesUI() {
     document.getElementById('classes-container').innerHTML = '';
@@ -205,22 +260,19 @@ function addStudent(button) {
 
         const classCard = button.closest('.class-card');
         const className = classCard.querySelector('h3').innerText;
-        let classes = JSON.parse(localStorage.getItem('classes')) || [];
-
-        classes = classes.map(c => {
-            if (c.name === className) {
-                if (!c.students) {
-                    c.students = [];
-                }
-                c.students.push({ name, password, grade });
-            }
-            return c;
+		
+        db.collection('classes').where('name', '==', className).get().then((querySnapshot) => {
+            querySnapshot.forEach((doc) => {
+                const classData = doc.data();
+                classData.students.push({ name, password, grade });
+                db.collection('classes').doc(doc.id).update(classData).then(() => {
+                    console.log('Student added successfully');
+                    updateClassesUI();
+                }).catch((error) => {
+                    console.error('Error adding student: ', error);
+                });
+            });
         });
-
-        localStorage.setItem('classes', JSON.stringify(classes));
-        updateClassesUI();
-        
-        // Zeige den "Schüler hinzufügen"-Button wieder an
         classCard.querySelector('.add-student-button').classList.remove('hidden');
     } else {
         alert('Bitte geben Sie alle Schülerdaten ein.');
@@ -259,27 +311,36 @@ function loadStudents(classCard, students) {
 }
 
 function updateGrade(input, className, studentName) {
-    let classes = JSON.parse(localStorage.getItem('classes')) || [];
-    classes = classes.map(c => {
-        if (c.name === className) {
-            c.students = c.students.map(s => s.name === studentName ? { ...s, grade: input.value } : s);
-        }
-        return c;
+    let newGrade = input.value;
+    db.collection('classes').where('name', '==', className).get().then((querySnapshot) => {
+        querySnapshot.forEach((doc) => {
+            let classData = doc.data();
+            classData.students = classData.students.map(s => s.name === studentName ? { ...s, grade: newGrade } : s);
+            db.collection('classes').doc(doc.id).update(classData).then(() => {
+                console.log('Grade updated successfully');
+            }).catch((error) => {
+                console.error('Error updating grade: ', error);
+            });
+        });
     });
-    localStorage.setItem('classes', JSON.stringify(classes));
 }
 
+
 function deleteStudent(button, className, studentName) {
-    let classes = JSON.parse(localStorage.getItem('classes')) || [];
-    classes = classes.map(c => {
-        if (c.name === className) {
-            c.students = c.students.filter(s => s.name !== studentName);
-        }
-        return c;
+    db.collection('classes').where('name', '==', className).get().then((querySnapshot) => {
+        querySnapshot.forEach((doc) => {
+            let classData = doc.data();
+            classData.students = classData.students.filter(s => s.name !== studentName);
+            db.collection('classes').doc(doc.id).update(classData).then(() => {
+                console.log('Student deleted successfully');
+                button.parentElement.remove();
+            }).catch((error) => {
+                console.error('Error deleting student: ', error);
+            });
+        });
     });
-    localStorage.setItem('classes', JSON.stringify(classes));
-    button.parentElement.remove();
 }
+
 
 function checkPassword(button, correctPassword, grade) {
     const passwordInput = button.previousElementSibling;
@@ -338,27 +399,59 @@ setTimeout(shoot, 200);
 
 function saveNewOrder(evt) {
     const classCards = document.querySelectorAll('.class-card');
-    let classes = [];
-    classCards.forEach(card => {
+    classCards.forEach((card, index) => {
         const name = card.querySelector('h3').innerText;
-        const description = card.querySelector('p').innerText;
-        const students = JSON.parse(localStorage.getItem('classes')).find(c => c.name === name).students;
-        classes.push({ name, description, students });
+        const classDocRef = db.collection('classes').doc(name);
+
+        // Update the position in Firebase
+        classDocRef.update({
+            position: index
+        })
+        .then(() => {
+            console.log(`Position of ${name} updated to ${index}`);
+        })
+        .catch((error) => {
+            console.error('Error updating position: ', error);
+        });
     });
-    localStorage.setItem('classes', JSON.stringify(classes));
 }
 
+
+
 function copyClass(name) {
-    let classes = JSON.parse(localStorage.getItem('classes')) || [];
-    const classToCopy = classes.find(c => c.name === name);
-    const newClassName = prompt('Name der neuen Klasse:', `${name} - Kopie`);
-    if (newClassName && classToCopy) {
-        const newClass = { ...classToCopy, name: newClassName };
-        classes.push(newClass);
-        localStorage.setItem('classes', JSON.stringify(classes));
-        updateClassesUI();
-    }
+    // Zuerst die Klasse aus Firebase abrufen
+    db.collection('classes').where('name', '==', name).get().then((querySnapshot) => {
+        if (!querySnapshot.empty) {
+            querySnapshot.forEach((doc) => {
+                const classToCopy = doc.data();
+                const newClassName = prompt('Name der neuen Klasse:', `${name} - Kopie`);
+
+                if (newClassName && classToCopy) {
+                    // Neue Klasse basierend auf der kopierten Klasse erstellen
+                    const newClass = {
+                        name: newClassName,
+                        description: classToCopy.description,
+                        students: classToCopy.students || [],
+                        order: classToCopy.order + 1 // Setze eine neue Reihenfolge
+                    };
+
+                    // Neue Klasse in Firebase speichern
+                    db.collection('classes').add(newClass).then(() => {
+                        console.log('Class copied successfully');
+                        updateClassesUI(); // UI nach dem Kopieren aktualisieren
+                    }).catch((error) => {
+                        console.error('Error copying class: ', error);
+                    });
+                }
+            });
+        } else {
+            console.error('Class not found');
+        }
+    }).catch((error) => {
+        console.error('Error finding class: ', error);
+    });
 }
+
 
 function xorEncryptDecrypt(input, key) {
     let output = '';
@@ -376,23 +469,33 @@ async function generatePDF(className) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    let classes = JSON.parse(localStorage.getItem('classes')) || [];
-    const classData = classes.find(c => c.name === className);
+    try {
+        const querySnapshot = await db.collection('classes').where('name', '==', className).get();
+        
+        if (!querySnapshot.empty) {
+            querySnapshot.forEach((docSnapshot) => {
+                const classData = docSnapshot.data();
+                
+                let yPosition = 10;
+                doc.setFontSize(16);
+                doc.text(`Klasse: ${classData.name}`, 10, yPosition);
+                yPosition += 10;
+                doc.setFontSize(12);
 
-    if (classData) {
-        let yPosition = 10;
-        doc.setFontSize(16);
-        doc.text(`Klasse: ${classData.name}`, 10, yPosition);
-        yPosition += 10;
-        doc.setFontSize(12);
+                classData.students.forEach(student => {
+                    doc.text(`Name: ${student.name} - Passwort: ${student.password}`, 10, yPosition);
+                    yPosition += 10;
+                });
 
-        classData.students.forEach(student => {
-            doc.text(`Name: ${student.name} - Passwort: ${student.password}`, 10, yPosition);
-            yPosition += 10;
-        });
-
-        doc.save(`${classData.name}_Schülerliste.pdf`);
+                doc.save(`${classData.name}_Schülerliste.pdf`);
+            });
+        } else {
+            console.error('Class not found');
+        }
+    } catch (error) {
+        console.error('Error generating PDF: ', error);
     }
 }
+
 
 updateClassesUI();
