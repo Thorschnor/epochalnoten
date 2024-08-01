@@ -7,9 +7,12 @@ function login() {
     const username = sanitizeInput(document.getElementById('username').value);
     const password = sanitizeInput(document.getElementById('password').value);
 
-    if (decrypt("VENWWc1GRVRA", "112") === username && decrypt("ZVldQ0JRWV9dQwAFHAEF", "112") === password) {
+    // Hier stellen Sie sicher, dass der Schlüssel eine Zeichenkette ist
+    const key = "112";
+
+    if (decrypt("VENWWc1GRVRA", key) === username && decrypt("ZVldQ0JRWV9dQwAFHAEF", key) === password) {
         isAdmin = true;
-        document.getElementById('login-form').classList.add('hidden');
+        document.getElementById('login-form').style.display = 'none';
         document.getElementById('logout-form').classList.remove('hidden');
         document.getElementById('admin-panel').classList.remove('hidden');
         updateClassesUI();
@@ -20,10 +23,13 @@ function login() {
 
 function logout() {
     isAdmin = false;
-    document.getElementById('login-form').classList.remove('hidden');
+    document.getElementById('login-form').style.display = 'flex';
     document.getElementById('logout-form').classList.add('hidden');
     document.getElementById('admin-panel').classList.add('hidden');
     updateClassesUI();
+	
+	document.getElementById('username').value = '';
+    document.getElementById('password').value = '';
 }
 
 function sanitizeInput(input) {
@@ -55,7 +61,7 @@ function createClassCard(name, description) {
         <h3>${name}</h3>
         <p>${description}</p>
         <div class="separator"></div>
-        <h4>Schüler</h4>
+        <h4 class="super">Schüler</h4>
         <div class="student-container"></div>
         ${isAdmin ? '<button class="add-student-trigger-button" onclick="showAddStudentForm(this)">Schüler hinzufügen</button>' : ''}
     `;
@@ -157,10 +163,10 @@ function showAddStudentForm(button) {
         <div class="student-card">
             <input type="text" placeholder="Name" class="student-name" maxlength="25">
             <input type="text" placeholder="Passwort" class="student-password" maxlength="6">
-            <button onclick="generatePassword(this)">🎲</button>
+            <button onclick="generatePassword(this)" class="button-centered-text">🎲</button>
             <input type="number" placeholder="Note" class="student-grade" min="1" max="6">
-            <button class="add-student-button">Hinzufügen</button>
-            <button onclick="removeAddStudentForm(this)" class="remove-add-student-button">Löschen</button>
+            <button class="add-student-button button-centered-text">Hinzufügen</button>
+            <button onclick="removeAddStudentForm(this)" class="remove-add-student-button button-centered-text">Löschen</button>
         </div>
     `;
 
@@ -242,10 +248,10 @@ function loadStudents(classCard, students) {
             ${isAdmin ? `<input type="text" value="${student.grade}" class="student-grade" onchange="updateGrade(this, '${classCard.querySelector('h3').innerText}', '${student.name}')">` : ''}
             ${!isAdmin ? `
                 <input type="password" placeholder="Passwort eingeben" class="student-password-input">
-                <button onclick="checkPassword(this, '${student.password}', '${student.grade}')">Note Anzeigen</button>
+                <button onclick="checkPassword(this, '${student.password}', '${student.grade}')" class="note-button">Note Anzeigen</button>
                 <span class="student-grade-display hidden">Note: ${student.grade}</span>
             ` : ''}
-            ${isAdmin ? `<button class="delete-student-button" onclick="deleteStudent(this, '${classCard.querySelector('h3').innerText}', '${student.name}')">X</button>` : ''}
+            ${isAdmin ? `<button class="delete-student-button" onclick="deleteStudent(this, '${classCard.querySelector('h3').innerText}', '${student.name}')">x</button>` : ''}
         `;
 
         studentContainer.appendChild(studentCard);
@@ -282,12 +288,52 @@ function checkPassword(button, correctPassword, grade) {
 
     if (enteredPassword === correctPassword) {
         gradeDisplay.classList.remove('hidden');
+        gradeDisplay.classList.add('grade-display-left'); // Klasse hinzufügen
         button.style.display = 'none';
-        passwordInput.style.display = 'none';
+        passwordInput.classList.add('hidden-input'); // Passwortfeld unsichtbar machen
         gradeDisplay.innerHTML = `<strong>Note:</strong> ${grade}`; // Note fett machen
+        gradeDisplay.style.fontSize = '2rem'; // Schriftgröße anpassen
+        gradeDisplay.style.fontWeight = 'bold'; // Schrift fett machen
+
+        // Konfetti abschießen, wenn die Note 1 ist
+        if (grade == 1) {
+            shootConfetti();
+        }
     } else {
         alert('Falsches Passwort');
     }
+}
+
+function shootConfetti() {
+    const defaults = {
+  spread: 360,
+  ticks: 50,
+  gravity: 0,
+  decay: 0.94,
+  startVelocity: 30,
+  shapes: ["star"],
+  colors: ["FFE400", "FFBD00", "E89400", "FFCA6C", "FDFFB8"],
+};
+
+function shoot() {
+  confetti({
+    ...defaults,
+    particleCount: 40,
+    scalar: 1.2,
+    shapes: ["star"],
+  });
+
+  confetti({
+    ...defaults,
+    particleCount: 10,
+    scalar: 0.75,
+    shapes: ["circle"],
+  });
+}
+
+setTimeout(shoot, 0);
+setTimeout(shoot, 100);
+setTimeout(shoot, 200);
 }
 
 function saveNewOrder(evt) {
